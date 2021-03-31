@@ -82,7 +82,7 @@ class OlympClient(Client):
         self._access_token = access_token
         self._tenant_id = self._user[2] if self._user else None
         self._referenced_data_auto_load = referenced_data_auto_load
-        self._ext_clients: defaultdict[str, Dict[str, Client]] = defaultdict(dict)
+        self._ext_clients: 'defaultdict[str, Dict[str, Client]]' = defaultdict(dict)
         self._ext_clients.update(referenced_data_clients)
         self._referenced_data_cache = {}
         self._referenced_data_expire = referenced_data_expire
