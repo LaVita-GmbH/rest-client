@@ -98,7 +98,7 @@ class OlympClient(Client):
             if not self._tokens.get('transaction'):
                 self.auth_transaction()
 
-            claims = jwt.decode(self._tokens['transaction'], key=None, options={'verify_signature': False})
+            claims = jwt.decode(self._tokens['transaction'], key=None, options={'verify_signature': False, 'verify_aud': False})
             self._tenant_id = claims.get('ten')
 
         return self._tenant_id
@@ -153,7 +153,7 @@ class OlympClient(Client):
 
             for key, value in values.items():
                 if key == '$rel':
-                    update, time = self._load_related_data(value, **values, _cache=self._referenced_data_cache)
+                    update, time = self._load_related_data(value, tenant_id=self.tenant_id, **values, _cache=self._referenced_data_cache)
 
                 else:
                     enrich_data(value)
