@@ -13,12 +13,14 @@ class OlympClient(Client):
     DEFAULT_AUTH = 'transaction'
 
     class Request(Client.Request):
-        def __init__(self, client, method, endpoint, timeout: Optional[int], return_plain_response: bool, other_ok_states: Optional[Tuple[int]], **kwargs):
+        def __init__(self, client, method, endpoint, timeout: Optional[int], return_plain_response: bool, other_ok_states: Optional[Tuple[int]], referenced_data_load=None, **kwargs):
             if 'auth' in kwargs:
                 self.auth = kwargs.pop('auth')
 
             else:
                 self.auth = client.DEFAULT_AUTH
+
+            self._referenced_data_load = referenced_data_load
 
             super().__init__(client, method, endpoint, timeout=timeout, return_plain_response=return_plain_response, other_ok_states=other_ok_states, **kwargs)
 
@@ -53,7 +55,7 @@ class OlympClient(Client):
                 raise self.APIError(self, self._response.text)
 
             if self._response_data:
-                if self.client._referenced_data_auto_load:
+                if self.client._referenced_data_auto_load and self._referenced_data_load is not False:
                     self.client.load_referenced_data(self._response_data)
 
                 return self._response_data
@@ -96,7 +98,7 @@ class OlympClient(Client):
             if not self._tokens.get('transaction'):
                 self.auth_transaction()
 
-            claims = jwt.decode(self._tokens['transaction'], options={'verify_signature': False})
+            claims = jwt.decode(self._tokens['transaction'], key=None, options={'verify_signature': False})
             self._tenant_id = claims.get('ten')
 
         return self._tenant_id
@@ -175,7 +177,7 @@ class OlympClient(Client):
         self._tokens['user'] = data['token']['user']
 
     def auth_transaction(self):
-        data = self.access.auth.transaction.post(auth=None if self._access_token else 'user', json={
+        data = self.access.auth.transaction.post(referenced_data_load=False, auth=None if self._access_token else 'user', json={
             'access_token': self._access_token,
         })
 
