@@ -49,6 +49,9 @@ class OlympClient(Client):
 
             if not self._response.ok and self._response.status_code not in self.other_ok_states:
                 if self._response_data:
+                    if self._response.status_code == 422:
+                        raise self.APIError(self, "ValidationError", self._response_data)
+
                     error_type = self._response_data.get('detail', {}).get('type') if self._response_data else "Unknown"
                     raise self.APIError(self, error_type, self._response_data)
 
