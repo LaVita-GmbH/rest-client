@@ -47,7 +47,7 @@ class OlympClient(Client):
                     del self.client._tokens[self.auth]
                     raise RetryError
 
-            if self._response.status_code == 420 and self.retry <= 2:
+            if self._response.status_code == 420 and self.retry <= self.max_retry:
                 if self._response_data and self._response_data.get('detail', {}).get('type') == 'IntegrityError' \
                     and self._response_data.get('detail', {}).get('code').startswith('foreign_key_violation:'):
                     raise RetryError
