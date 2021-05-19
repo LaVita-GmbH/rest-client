@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from jose import jwt
 from jsonpath_ng import parse as jsonpath_parse
+from requests.exceptions import RetryError
 from . import Client
 
 
@@ -44,13 +45,12 @@ class OlympClient(Client):
                     # Token has expired, retry request
                     # delete  token so a new token is fetched before doing the action request
                     del self.client._tokens[self.auth]
-
-                    return self.perform()
+                    raise RetryError
 
             if self._response.status_code == 420 and self.retry <= 2:
                 if self._response_data and self._response_data.get('detail', {}).get('type') == 'IntegrityError' \
                     and self._response_data.get('detail', {}).get('code').startswith('foreign_key_violation:'):
-                    return self.perform()
+                    raise RetryError
 
             if self.return_plain_response:
                 return self._response

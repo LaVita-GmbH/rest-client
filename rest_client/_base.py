@@ -1,6 +1,7 @@
 import time
 from typing import Optional, Tuple
 import requests
+from requests.exceptions import RetryError
 
 
 class Client:
@@ -156,9 +157,12 @@ class Client:
 
             self._response_data = self._get_response_data()
 
-            return self._handle_response()
+            try:
+                return self._handle_response()
 
-    # REQUEST_CLASS = Request
+            except RetryError:
+                self._response = None
+                return self.get_response()
 
     def __init__(self, url, timeout=10, verify=True):
         """
