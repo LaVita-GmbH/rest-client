@@ -1,10 +1,12 @@
 import logging
-import time
-from typing import Dict, Optional, Tuple
+import re
+from sys import exc_info
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
-from . import Client
 from jose import jwt
+from jsonpath_ng import parse as jsonpath_parse
+from . import Client
 
 
 _logger = logging.getLogger(__name__)
@@ -112,7 +114,7 @@ class OlympClient(Client):
 
         return self._tenant_id
 
-    def _load_related_data(self, relation: str, tenant_id: str, id: Optional[str] = None, _cache: Optional[dict] = None, **lookup):
+    def _load_related_data(self, relation: str, tenant_id: str, curr_obj: dict, id: Optional[str] = None, _cache: Optional[dict] = None, **lookup):
         if _cache is None:
             _cache = {}
 
@@ -126,14 +128,34 @@ class OlympClient(Client):
 
         else:
             endpoint = client
+            def resolve_path(match):
+                result = jsonpath_parse(match.group(1)).find(curr_obj)[0]
+                return result.value
+
             for loc in relation_location[1:]:
+                try:
+                    loc = re.sub(
+                        r'\{([^\}]+)\}',
+                        resolve_path,
+                        loc,
+                    )
+
+                except IndexError:
+                    _logger.warn("Cannot resolve loc='%s' for $rel='%s' with tenant_id='%s'", loc)
+                    return
+
                 endpoint = getattr(endpoint, loc)
 
             cache_key = f'{relation}@{tenant_id}/'
             if id:
                 cache_key += id
                 if cache_key not in _cache or datetime.utcnow() - _cache[cache_key][1] > self._referenced_data_expire:
-                    _cache[cache_key] = (endpoint[id].get(), datetime.utcnow())
+                    try:
+                        _cache[cache_key] = (endpoint[id].get(), datetime.utcnow())
+
+                    except self.Request.APIError as error:
+                        _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
+                        return
 
                 return _cache[cache_key]
 
@@ -149,26 +171,34 @@ class OlympClient(Client):
 
         self._ext_clients['olymp'][self.tenant_id] = self
 
-        def enrich_data(values):
+        def enrich_data(values, parent: Optional[dict] = None):
             if isinstance(values, list):
                 for item in values:
-                    enrich_data(item)
+                    enrich_data(item, parent=parent)
 
             if not isinstance(values, dict):
                 return
+
+            if parent:
+                values['_parent'] = parent
 
             update = None
             time: datetime = None
 
             for key, value in values.items():
+                if key == '_parent':
+                    continue
+
                 if key == '$rel':
-                    update, time = self._load_related_data(value, tenant_id=self.tenant_id, **values, _cache=self._referenced_data_cache)
+                    related = self._load_related_data(value, tenant_id=self.tenant_id, curr_obj=values, **values, _cache=self._referenced_data_cache)
+                    if related:
+                        update, time = related
 
                 else:
-                    enrich_data(value)
+                    enrich_data(value, parent=values)
 
             if update:
-                enrich_data(update)
+                enrich_data(update, parent=values)
                 values.update(update)
                 values['$rel_at'] = time.isoformat()
 
