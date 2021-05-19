@@ -1,4 +1,4 @@
-import json
+import time
 from typing import Optional, Tuple
 import requests
 
@@ -98,13 +98,15 @@ class Client:
 
         _response: requests.Response = None
 
-        def __init__(self, client, method, endpoint, timeout: Optional[int] = None, return_plain_response: bool = False, other_ok_states: Optional[Tuple[int]] = None, **kwargs):
+        def __init__(self, client, method, endpoint, timeout: Optional[int] = None, return_plain_response: bool = False, other_ok_states: Optional[Tuple[int]] = None, backoff: int = 0.1, **kwargs):
             self.client: Client = client
             self.method = method
             self.endpoint = endpoint
             self.timeout = timeout or self.client.timeout
             self.return_plain_response = return_plain_response
             self.other_ok_states = other_ok_states or tuple()
+            self.retry = -1
+            self.backoff = backoff
 
             if 'verify' not in kwargs:
                 kwargs['verify'] = self.client.verify
@@ -141,6 +143,10 @@ class Client:
                 return None
 
         def perform(self):
+            self.retry += 1
+            if self.retry > 0:
+                time.sleep(self.backoff * self.retry)
+
             self._response = self._response_data = None
             self._response = self._perform_request()
 

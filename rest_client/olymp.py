@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -37,11 +38,16 @@ class OlympClient(Client):
 
         def _handle_response(self):
             if self._response.status_code == 401:
-                if self._response_data and self._response_data.get('detail', {}).get('type') in 'ExpiredSignatureError':
+                if self._response_data and self._response_data.get('detail', {}).get('type') == 'ExpiredSignatureError':
                     # Token has expired, retry request
                     # delete  token so a new token is fetched before doing the action request
                     del self.client._tokens[self.auth]
 
+                    return self.perform()
+
+            if self._response.status_code == 420 and self.retry <= 2:
+                if self._response_data and self._response_data.get('detail', {}).get('type') == 'IntegrityError' \
+                    and self._response_data.get('detail', {}).get('code').startswith('foreign_key_violation:'):
                     return self.perform()
 
             if self.return_plain_response:
