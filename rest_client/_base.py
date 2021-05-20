@@ -99,7 +99,7 @@ class Client:
 
         _response: requests.Response = None
 
-        def __init__(self, client, method, endpoint, timeout: Optional[int] = None, return_plain_response: bool = False, other_ok_states: Optional[Tuple[int]] = None, backoff: int = 0.1, **kwargs):
+        def __init__(self, client, method, endpoint, timeout: Optional[int] = None, return_plain_response: bool = False, other_ok_states: Optional[Tuple[int]] = None, max_retry: int = 3, backoff: int = 0.1, **kwargs):
             self.client: Client = client
             self.method = method
             self.endpoint = endpoint
@@ -108,6 +108,7 @@ class Client:
             self.other_ok_states = other_ok_states or tuple()
             self.retry = -1
             self.backoff = backoff
+            self.max_retry = max_retry
 
             if 'verify' not in kwargs:
                 kwargs['verify'] = self.client.verify
