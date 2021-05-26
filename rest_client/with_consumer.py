@@ -19,8 +19,12 @@ class Style2019ConsumerClient(Client):
             headers = super()._get_headers()
 
             if self.auth:
-                if self.auth == 'consumer' and not self.client._tokens.get('consumer'):
-                    self.client.auth_consumer()
+                if not self.client._tokens.get(self.auth):
+                    if self.auth == 'consumer':
+                        self.client.auth_consumer()
+
+                    elif self.auth in ('customer_weak', 'customer_strong', 'user'):
+                        self.client.auth_customer()
 
                 headers['Authorization'] = 'Bearer %s' % self.client._tokens[self.auth]
 
@@ -53,16 +57,28 @@ class Style2019ConsumerClient(Client):
 
             return None
 
-    def __init__(self, url, *, timeout=10, verify=True, consumer: Tuple[str, str]):
+    def __init__(self, url, *, timeout=10, verify=True, consumer: Tuple[str, str], customer: Optional[Tuple[str, str]] = None, password_field: str = 'key'):
         super().__init__(url, timeout=timeout, verify=verify)
 
         self._consumer = consumer
+        self._customer = customer
+        self._password_field = password_field
         self._tokens = {}
 
     def auth_consumer(self):
         data = self.request('POST', '/auth/consumer', auth=None, json={
             'uid': self._consumer[0],
-            'key': self._consumer[1],
+            self._password_field: self._consumer[1],
         })
 
         self._tokens['consumer'] = data['token']
+
+    def auth_customer(self):
+        data = self.request('POST', '/auth/customer', auth='consumer', json={
+            'login': self._customer[0],
+            'password': self._customer[1],
+        })
+
+        self._tokens['customer_weak'] = data['token']['weak']['value']
+        self._tokens['customer_strong'] = data['token']['strong']['value']
+        self._tokens['user'] = data['token'].get('user', {}).get('value')
