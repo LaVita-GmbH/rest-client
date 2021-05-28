@@ -1,7 +1,11 @@
 import time
+import logging
 from typing import Optional, Tuple
 import requests
 from requests.exceptions import RetryError
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Client:
@@ -123,13 +127,16 @@ class Client:
             if 'headers' in self.kwargs:
                 headers.update(self.kwargs.pop('headers'))
 
-            return requests.request(
+            _logger.debug("Request start    %s %s", self.method.upper(), self.client.url + self.endpoint)
+            res = requests.request(
                 self.method.upper(),
                 self.client.url + self.endpoint,
                 headers=headers,
                 timeout=self.timeout,
                 **self.kwargs
             )
+            _logger.debug("Request finished %s %s", self.method.upper(), self.client.url + self.endpoint)
+            return res
 
         def _handle_response(self):
             if not self._response.ok and self._response.status_code not in self.other_ok_states:
