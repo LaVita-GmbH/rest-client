@@ -1,6 +1,6 @@
 import logging
 import re
-from sys import exc_info
+from urllib.parse import urlencode
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -15,6 +15,11 @@ _logger = logging.getLogger(__name__)
 
 class OlympClient(Client):
     DEFAULT_AUTH = 'transaction'
+
+    class Endpoint(Client.Endpoint):
+        def __init__(self, client, path=[]):
+            super().__init__(client, path=path)
+            self.endpoint = "/" + "/".join([str(el).replace('_', '-') for el in self.path])
 
     class Request(Client.Request):
         def __init__(self, client, method, endpoint, timeout: Optional[int], return_plain_response: bool, other_ok_states: Optional[Tuple[int]], referenced_data_load=None, **kwargs):
@@ -129,16 +134,26 @@ class OlympClient(Client):
         else:
             endpoint = client
             def resolve_path(match):
-                result = jsonpath_parse(match.group(1)).find(curr_obj)[0]
-                return result.value
+                try:
+                    result = jsonpath_parse(match.group(1)).find(curr_obj)[0]
+                    return result.value
+
+                except IndexError:
+                    pass
+
+            def resolve_placeholder(value):
+                if not isinstance(value, str):
+                    return value
+
+                return re.sub(
+                    r'\{([^\}]+)\}',
+                    resolve_path,
+                    value,
+                )
 
             for loc in relation_location[1:]:
                 try:
-                    loc = re.sub(
-                        r'\{([^\}]+)\}',
-                        resolve_path,
-                        loc,
-                    )
+                    loc = resolve_placeholder(loc)
 
                 except IndexError:
                     _logger.warn("Cannot resolve loc='%s' for $rel='%s' with tenant_id='%s'", loc)
@@ -146,9 +161,15 @@ class OlympClient(Client):
 
                 endpoint = getattr(endpoint, loc)
 
-            cache_key = f'{relation}@{tenant_id}/'
+            def get_params() -> str:
+                if '$rel_params' not in curr_obj:
+                    return ''
+
+                return f'?{urlencode(curr_obj["$rel_params"])}'
+
+            cache_key = f'{tenant_id}@{relation}'
             if id:
-                cache_key += id
+                cache_key += f'/{id}{get_params()}'
                 if cache_key not in _cache or datetime.utcnow() - _cache[cache_key][1] > self._referenced_data_expire:
                     try:
                         _cache[cache_key] = (endpoint[id].get(), datetime.utcnow())
@@ -157,12 +178,37 @@ class OlympClient(Client):
                         _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
                         return
 
-                return _cache[cache_key]
+            elif '$rel_params' in curr_obj:
+                cache_key += get_params()
+                params = {key: resolve_placeholder(value) for key, value in curr_obj['$rel_params'].items()}
+                if curr_obj.get('$rel_is_lookup'):
+                    params['limit'] = 1
+
+                try:
+                    objects = endpoint.get(params=params)
+
+                except self.Request.APIError as error:
+                    _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
+                    return
+
+                if curr_obj.get('$rel_is_lookup'):
+                    cache_key += '[0]'
+                    try:
+                        _cache[cache_key] = (objects[loc][0], datetime.utcnow())
+
+                    except (KeyError, IndexError) as error:
+                        _logger.warn("Failed to get object from lookup for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
+                        return
+
+                else:
+                    _cache[cache_key] = (objects, datetime.utcnow())
 
             else:
                 raise NotImplementedError
 
-    def load_referenced_data(self, values: dict, clear_cache: bool = False):
+            return _cache[cache_key]
+
+    def load_referenced_data(self, values: dict, clear_cache: bool = False, parent: Optional[dict] = None):
         """
         Load referenced data into `values`, performing an in-place update.
         """
@@ -202,7 +248,10 @@ class OlympClient(Client):
                 values.update(update)
                 values['$rel_at'] = time.isoformat()
 
-        enrich_data(values)
+            if parent:
+                del values['_parent']
+
+        enrich_data(values, parent=parent)
 
     def auth_user(self):
         data = self.access.auth.user.post(auth=None, json={
