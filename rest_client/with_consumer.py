@@ -32,12 +32,14 @@ class Style2019ConsumerClient(Client):
 
         def _handle_response(self):
             if self._response.status_code == 401:
-                if self._response_data and self._response_data.get('error', {}).get('type') in 'ExpiredSignatureError':
-                    # Token has expired, retry request
-                    # delete consumer token so a new token is fetched before doing the action request
-                    del self.client._tokens[self.auth]
+                if self._response_data:
+                    error = self._response_data.get('error', {})
+                    if error.get('type') in self.client._token_expired_error_type:
+                        # Token has expired, retry request
+                        # delete consumer token so a new token is fetched before doing the action request
+                        del self.client._tokens[self.auth]
 
-                    return self.perform()
+                        return self.perform()
 
             if self.return_plain_response:
                 return self._response
@@ -57,13 +59,24 @@ class Style2019ConsumerClient(Client):
 
             return None
 
-    def __init__(self, url, *, timeout=10, verify=True, consumer: Tuple[str, str], customer: Optional[Tuple[str, str]] = None, password_field: str = 'key'):
+    def __init__(
+        self,
+        url,
+        *,
+        timeout=10,
+        verify=True,
+        consumer: Tuple[str, str],
+        customer: Optional[Tuple[str, str]] = None,
+        password_field: str = 'key',
+        token_expired_error_type: str = 'ExpiredSignatureError',
+    ):
         super().__init__(url, timeout=timeout, verify=verify)
 
         self._consumer = consumer
         self._customer = customer
         self._password_field = password_field
         self._tokens = {}
+        self._token_expired_error_type = token_expired_error_type
 
     def auth_consumer(self):
         data = self.request('POST', '/auth/consumer', auth=None, json={
