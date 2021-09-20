@@ -1,3 +1,4 @@
+from json.decoder import JSONDecodeError
 import logging
 import re
 from urllib.parse import urlencode
@@ -95,6 +96,7 @@ class OlympClient(Client):
         referenced_data_auto_load: bool = False,
         referenced_data_clients: Optional[Dict[str, Dict[str, Client]]] = None,
         referenced_data_expire: timedelta = timedelta(seconds=3600),
+        include_critical: bool = False,
     ):
         assert user or access_token, "user or access_token must be given"
 
@@ -102,6 +104,7 @@ class OlympClient(Client):
 
         self._user = user
         self._access_token = access_token
+        self._include_critical = include_critical
         self._tenant_id = self._user[2] if self._user else None
         self._referenced_data_auto_load = referenced_data_auto_load
         self._ext_clients: 'defaultdict[str, Dict[str, Client]]' = defaultdict(dict)
@@ -269,8 +272,27 @@ class OlympClient(Client):
         self._tokens['user'] = data['token']['user']
 
     def auth_transaction(self):
-        data = self.access.auth.transaction.post(referenced_data_load=False, auth=None if self._access_token else 'user', json={
-            'access_token': self._access_token,
-        })
+        try:
+            data = self.access.auth.transaction.post(referenced_data_load=False, auth=None if self._access_token else 'user', json={
+                'access_token': self._access_token,
+                'include_critical': self._include_critical,
+            })
+
+        except self.Request.APIError as error:
+            if error.response:
+                try:
+                    data = error.response.json()
+                    if data['error']['type'] == 'AuthError' and data['error']['code'] == 'token_too_old_for_include_critical':
+                        del self._tokens['user']
+                        return self.auth_transaction()
+
+                    else:
+                        raise error
+
+                except JSONDecodeError:
+                    raise error
+
+            else:
+                raise error
 
         self._tokens['transaction'] = data['token']['transaction']
