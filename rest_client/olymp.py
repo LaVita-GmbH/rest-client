@@ -238,7 +238,7 @@ class OlympClient(Client):
             update = None
             time: datetime = None
 
-            for key, value in values.items():
+            for key, value in list(values.items()):
                 if key == '_parent':
                     continue
 
