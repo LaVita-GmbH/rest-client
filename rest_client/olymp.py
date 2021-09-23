@@ -76,7 +76,7 @@ class OlympClient(Client):
                 raise self.APIError(self, self._response.text)
 
             if self._response_data:
-                if self.client._referenced_data_auto_load and self._referenced_data_load is not False:
+                if (self.client._referenced_data_auto_load and self._referenced_data_load is not False) or self._referenced_data_load:
                     self.client.load_referenced_data(self._response_data)
 
                 return self._response_data
