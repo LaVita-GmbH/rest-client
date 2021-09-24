@@ -193,24 +193,28 @@ class OlympClient(Client):
                 if curr_obj.get('$rel_is_lookup'):
                     params['limit'] = 1
 
-                try:
-                    objects = endpoint.get(params=params)
-
-                except self.Request.APIError as error:
-                    _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
-                    return
-
-                if curr_obj.get('$rel_is_lookup'):
-                    cache_key += '[0]'
+                if cache_key not in _cache or datetime.utcnow() - _cache[cache_key][1] > self._referenced_data_expire:
                     try:
-                        _cache[cache_key] = (objects[loc][0], datetime.utcnow())
+                        objects = endpoint.get(params=params, referenced_data_load=False)
+                        _cache[cache_key] = (objects, datetime.utcnow())
+                        self.load_referenced_data(objects, clear_cache=False, parent=curr_obj)
 
-                    except (KeyError, IndexError) as error:
-                        _logger.warn("Failed to get object from lookup for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
+                    except self.Request.APIError as error:
+                        _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
                         return
 
                 else:
-                    _cache[cache_key] = (objects, datetime.utcnow())
+                    objects = _cache[cache_key]
+
+                if curr_obj.get('$rel_is_lookup'):
+                    cache_key += '[0]'
+                    if cache_key not in _cache or datetime.utcnow() - _cache[cache_key][1] > self._referenced_data_expire:
+                        try:
+                            _cache[cache_key] = (objects[loc][0], datetime.utcnow())
+
+                        except (KeyError, IndexError) as error:
+                            _logger.warn("Failed to get object from lookup for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
+                            return
 
             else:
                 raise NotImplementedError
