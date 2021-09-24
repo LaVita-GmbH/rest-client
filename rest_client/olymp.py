@@ -181,7 +181,6 @@ class OlympClient(Client):
                     try:
                         data = endpoint[id].get(referenced_data_load=False)
                         _cache[cache_key] = (data, datetime.utcnow())
-                        self.load_referenced_data(data, clear_cache=False, parent=curr_obj)
 
                     except self.Request.APIError as error:
                         _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
@@ -197,7 +196,6 @@ class OlympClient(Client):
                     try:
                         objects = endpoint.get(params=params, referenced_data_load=False)
                         _cache[cache_key] = (objects, datetime.utcnow())
-                        self.load_referenced_data(objects, clear_cache=False, parent=curr_obj)
 
                     except self.Request.APIError as error:
                         _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
