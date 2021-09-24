@@ -96,6 +96,7 @@ class OlympClient(Client):
         referenced_data_auto_load: bool = False,
         referenced_data_clients: Optional[Dict[str, Dict[str, Client]]] = None,
         referenced_data_expire: timedelta = timedelta(seconds=3600),
+        referenced_data_max_level: int = 5,
         include_critical: bool = False,
     ):
         assert user or access_token, "user or access_token must be given"
@@ -113,6 +114,7 @@ class OlympClient(Client):
 
         self._referenced_data_cache = {}
         self._referenced_data_expire = referenced_data_expire
+        self._referenced_data_max_level = referenced_data_max_level
         self._tokens = {}
 
     @property
@@ -219,21 +221,30 @@ class OlympClient(Client):
 
             return _cache[cache_key]
 
-    def load_referenced_data(self, values: dict, clear_cache: bool = False, parent: Optional[dict] = None):
+    def load_referenced_data(self, values: dict, clear_cache: bool = False, parent: Optional[dict] = None, max_level: Optional[int] = None):
         """
         Load referenced data into `values`, performing an in-place update.
         """
         if clear_cache:
             self._referenced_data_cache = {}
 
+        if not max_level:
+            max_level = self._referenced_data_max_level
+
         self._ext_clients['olymp'][self.tenant_id] = self
 
-        def enrich_data(values, parent: Optional[dict] = None):
+        def enrich_data(values, parent: Optional[dict] = None, level: int = 0):
             if isinstance(values, list):
                 for item in values:
-                    enrich_data(item, parent=parent)
+                    enrich_data(item, parent=parent, level=level + 1)
 
             if not isinstance(values, dict):
+                return
+
+            if '$rel_at' in values:
+                return
+
+            if level > max_level:
                 return
 
             if parent:
@@ -252,10 +263,10 @@ class OlympClient(Client):
                         update, time = related
 
                 else:
-                    enrich_data(value, parent=values)
+                    enrich_data(value, parent=values, level=level + 1)
 
             if update:
-                enrich_data(update, parent=values)
+                enrich_data(update, parent=values, level=level + 1)
                 values.update(update)
                 values['$rel_at'] = time.isoformat()
 
