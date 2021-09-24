@@ -179,7 +179,9 @@ class OlympClient(Client):
                 cache_key += f'/{id}{get_params()}'
                 if cache_key not in _cache or datetime.utcnow() - _cache[cache_key][1] > self._referenced_data_expire:
                     try:
-                        _cache[cache_key] = (endpoint[id].get(), datetime.utcnow())
+                        data = endpoint[id].get(referenced_data_load=False)
+                        _cache[cache_key] = (data, datetime.utcnow())
+                        self.load_referenced_data(data, clear_cache=False, parent=curr_obj)
 
                     except self.Request.APIError as error:
                         _logger.warn("Failed to load referenced data for $rel='%s' with tenant_id='%s', error: %r", relation, tenant_id, error, exc_info=True)
