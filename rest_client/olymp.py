@@ -204,7 +204,7 @@ class OlympClient(Client):
                         return
 
                 else:
-                    objects = _cache[cache_key]
+                    objects = _cache[cache_key][0]
 
                 if curr_obj.get('$rel_is_lookup'):
                     cache_key += '[0]'
