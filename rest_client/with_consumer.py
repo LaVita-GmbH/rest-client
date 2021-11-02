@@ -79,18 +79,25 @@ class Style2019ConsumerClient(Client):
         self._token_expired_error_type = token_expired_error_type
 
     def auth_consumer(self):
-        data = self.request('POST', '/auth/consumer', auth=None, json={
+        request = self._request('POST', '/auth/consumer', auth=None, json={
             'uid': self._consumer[0],
             self._password_field: self._consumer[1],
         })
 
+        data = request.get_response()
+        if not data:
+            raise request.APIError(request, "auth_consumer failed")
+
         self._tokens['consumer'] = data['token']
 
     def auth_customer(self):
-        data = self.request('POST', '/auth/customer', auth='consumer', json={
+        request = self._request('POST', '/auth/customer', auth='consumer', json={
             'login': self._customer[0],
             'password': self._customer[1],
         })
+        data = request.get_response()
+        if not data:
+            raise request.APIError(request, "auth_customer failed")
 
         self._tokens['customer_weak'] = data['token']['weak']['value']
         self._tokens['customer_strong'] = data['token']['strong']['value']

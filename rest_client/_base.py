@@ -188,8 +188,8 @@ class Client:
         self.verify = verify
         self.endpoint = self.Endpoint(self)
 
-    def request(self, method, endpoint, timeout=None, return_plain_response=False, other_ok_states=(), **kwargs):
-        request = self.Request(
+    def _request(self, method, endpoint, timeout=None, return_plain_response=False, other_ok_states=(), **kwargs):
+        return self.Request(
             client=self,
             method=method,
             endpoint=endpoint,
@@ -199,7 +199,15 @@ class Client:
             **kwargs,
         )
 
-        return request.get_response()
+    def request(self, method, endpoint, timeout=None, return_plain_response=False, other_ok_states=(), **kwargs):
+        return self._request(
+            method=method,
+            endpoint=endpoint,
+            timeout=timeout,
+            return_plain_response=return_plain_response,
+            other_ok_states=other_ok_states,
+            **kwargs,
+        ).get_response()
 
     def __getattr__(self, name) -> Endpoint:
         return getattr(self.endpoint, name)
