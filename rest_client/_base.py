@@ -2,7 +2,7 @@ import time
 import logging
 from typing import Optional, Tuple
 import requests
-from requests.exceptions import RetryError
+from requests.exceptions import ReadTimeout, RetryError, ConnectionError
 
 
 _logger = logging.getLogger(__name__)
@@ -128,13 +128,21 @@ class Client:
                 headers.update(self.kwargs.pop('headers'))
 
             _logger.debug("Request start    %s %s", self.method.upper(), self.client.url + self.endpoint)
-            res = requests.request(
-                self.method.upper(),
-                self.client.url + self.endpoint,
-                headers=headers,
-                timeout=self.timeout,
-                **self.kwargs
-            )
+            try:
+                res = requests.request(
+                    self.method.upper(),
+                    self.client.url + self.endpoint,
+                    headers=headers,
+                    timeout=self.timeout,
+                    **self.kwargs
+                )
+
+            except (ConnectionError, ReadTimeout) as error:
+                if self.retry <= self.max_retry:
+                    raise RetryError from error
+
+                raise
+
             _logger.debug("Request finished %s %s", self.method.upper(), self.client.url + self.endpoint)
             return res
 
